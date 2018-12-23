@@ -1,7 +1,6 @@
 package mdns
 
 import (
-	"fmt"
 	"net"
 	"time"
 
@@ -27,10 +26,10 @@ type Server struct {
 	me            net.IP
 }
 
-func (s *Server) LookupSRV(name string) dnsPacket.DNSPacket {
-	result := make(chan dnsPacket.DNSPacket)
+func (s *Server) LookupSRV(name string) dnsPacket.RecordTypeSRV {
+	result := make(chan dnsPacket.RecordTypeSRV)
 
-	go func(found chan dnsPacket.DNSPacket) {
+	go func(found chan dnsPacket.RecordTypeSRV) {
 		buffer := make([]byte, 1024)
 
 		for {
@@ -43,7 +42,9 @@ func (s *Server) LookupSRV(name string) dnsPacket.DNSPacket {
 
 				//is an srv record and the sender is not myself and the answer name is actually what we are looking for
 				if answer.Type == 33 && !sender.IP.Equal(s.me) && answer.Name == name {
-					result <- *decoded
+					record := answer.Process()
+
+					found <- *record.(*dnsPacket.RecordTypeSRV)
 				}
 			}
 		}
@@ -52,8 +53,8 @@ func (s *Server) LookupSRV(name string) dnsPacket.DNSPacket {
 	//Query every 500 milliseconds until we found a match ...
 	for {
 		select {
-		case packet := <-result:
-			return packet
+		case record := <-result:
+			return record
 		default:
 			s.Query(name, "IN", "SRV")
 			time.Sleep(time.Millisecond * 500)
@@ -61,10 +62,10 @@ func (s *Server) LookupSRV(name string) dnsPacket.DNSPacket {
 	}
 }
 
-func (s *Server) LookupA(name string) dnsPacket.DNSPacket {
-	result := make(chan dnsPacket.DNSPacket)
+func (s *Server) LookupA(name string) dnsPacket.RecordTypeA {
+	result := make(chan dnsPacket.RecordTypeA)
 
-	go func(found chan dnsPacket.DNSPacket) {
+	go func(found chan dnsPacket.RecordTypeA) {
 		buffer := make([]byte, 1024)
 
 		for {
@@ -77,7 +78,9 @@ func (s *Server) LookupA(name string) dnsPacket.DNSPacket {
 
 				//is an srv record and the sender is not myself and the answer name is actually what we are looking for
 				if answer.Type == 1 && !sender.IP.Equal(s.me) && answer.Name == name {
-					result <- *decoded
+					record := answer.Process()
+
+					found <- *record.(*dnsPacket.RecordTypeA)
 				}
 			}
 		}
@@ -86,8 +89,8 @@ func (s *Server) LookupA(name string) dnsPacket.DNSPacket {
 	//Query every 500 milliseconds until we found a match ...
 	for {
 		select {
-		case packet := <-result:
-			return packet
+		case record := <-result:
+			return record
 		default:
 			s.Query(name, "IN", "A")
 			time.Sleep(time.Millisecond * 500)
@@ -130,13 +133,12 @@ func (s *Server) Advertise() chan dnsPacket.DNSPacket {
 	go func(onResponse chan dnsPacket.DNSPacket) {
 		buffer := make([]byte, 1024)
 		for {
-			_, sender, _ := s.multicastConn.ReadFromUDP(buffer)
+			s.multicastConn.ReadFromUDP(buffer)
 
 			decoded := dnsPacket.Decode(buffer)
 
 			//1. is packet a dns query?
 			if decoded.Type == "query" && decoded.Qdcount > 0 {
-				fmt.Println("Query from: ", sender.IP)
 				handleQuery(s, *decoded)
 			}
 
