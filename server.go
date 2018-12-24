@@ -46,6 +46,7 @@ func (s *Server) LookupSRV(name string) dnsPacket.RecordTypeSRV {
 					record := answer.Process()
 
 					found <- *record.(*dnsPacket.RecordTypeSRV)
+					return
 				}
 			}
 		}
@@ -86,6 +87,7 @@ func (s *Server) LookupA(name string) dnsPacket.RecordTypeA {
 					record := answer.Process()
 
 					found <- *record.(*dnsPacket.RecordTypeA)
+					return
 				}
 			}
 		}
