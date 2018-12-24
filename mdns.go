@@ -1,6 +1,10 @@
 package mdns
 
-import "net"
+import (
+	"net"
+
+	"github.com/alabianca/dnsPacket"
+)
 
 //New returns a configured mdns server
 //listening @ 224.0.0.251:5353
@@ -36,6 +40,8 @@ func New() (*Server, error) {
 	serv.multicastConn = pc
 	serv.me = me
 	serv.entries = make(map[string]serviceEntry)
+	serv.QueryChan = make(chan dnsPacket.DNSPacket)
+	serv.ResponseChan = make(chan dnsPacket.DNSPacket)
 
 	return &serv, nil
 }

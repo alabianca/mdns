@@ -34,13 +34,11 @@ func (s *Server) Browse() {
 
 		for {
 			_, sender, _ := s.multicastConn.ReadFromUDP(buffer)
-
 			if sender.IP.Equal(s.me) {
 				continue
 			}
 
 			decoded := dnsPacket.Decode(buffer)
-
 			switch decoded.Type {
 			case "response":
 				s.ResponseChan <- *decoded
