@@ -1,6 +1,7 @@
 package mdns
 
 import (
+	"fmt"
 	"net"
 	"time"
 
@@ -37,7 +38,7 @@ func (s *Server) LookupSRV(name string) dnsPacket.RecordTypeSRV {
 			_, sender, _ := s.multicastConn.ReadFromUDP(buffer)
 
 			decoded := dnsPacket.Decode(buffer)
-
+			fmt.Printf("SRV Query: %d %s\n", decoded.Questions[0].Qtype, sender.IP)
 			if decoded.Type == "response" && decoded.Ancount >= 0 {
 				answer := decoded.Answers[0]
 
@@ -130,29 +131,27 @@ func (s *Server) Respond(name string, anType int, queryPacket dnsPacket.DNSPacke
 	s.conn.Write(dnsPacket.Encode(&queryPacket))
 }
 
-func (s *Server) Advertise() chan dnsPacket.DNSPacket {
-	responseChannel := make(chan dnsPacket.DNSPacket)
+func (s *Server) Advertise() {
 
-	go func(onResponse chan dnsPacket.DNSPacket) {
+	go func() {
 		buffer := make([]byte, 1024)
 		for {
 
-			s.multicastConn.ReadFromUDP(buffer)
+			_, sender, _ := s.multicastConn.ReadFromUDP(buffer)
 
 			decoded := dnsPacket.Decode(buffer)
 			//1. is packet a dns query?
 			if decoded.Type == "query" && decoded.Qdcount > 0 {
+				fmt.Printf("Query: %d %s\n", decoded.Questions[0].Qtype, sender.IP)
 				handleQuery(s, *decoded)
 			}
 
-			if decoded.Type == "response" {
-				onResponse <- *decoded
-			}
+			// if decoded.Type == "response" {
+			// 	onResponse <- *decoded
+			// }
 		}
 
-	}(responseChannel)
-
-	return responseChannel
+	}()
 }
 
 func (s *Server) RegisterService(name string, host string, ip string, port uint16, ttl uint32, priority uint16, weight uint16) {
