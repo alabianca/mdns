@@ -24,8 +24,8 @@ type Server struct {
 	conn          *net.UDPConn
 	entries       map[string]serviceEntry
 	me            net.IP
-	responseChan  chan dnsPacket.DNSPacket
-	queryChan     chan dnsPacket.DNSPacket
+	ResponseChan  chan dnsPacket.DNSPacket
+	QueryChan     chan dnsPacket.DNSPacket
 }
 
 func (s *Server) Browse() {
@@ -43,9 +43,9 @@ func (s *Server) Browse() {
 
 			switch decoded.Type {
 			case "response":
-				s.responseChan <- *decoded
+				s.ResponseChan <- *decoded
 			case "query":
-				s.queryChan <- *decoded
+				s.QueryChan <- *decoded
 			}
 		}
 	}()
