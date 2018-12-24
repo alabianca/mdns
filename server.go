@@ -1,7 +1,6 @@
 package mdns
 
 import (
-	"fmt"
 	"net"
 	"time"
 
@@ -38,7 +37,6 @@ func (s *Server) LookupSRV(name string) dnsPacket.RecordTypeSRV {
 			_, sender, _ := s.multicastConn.ReadFromUDP(buffer)
 
 			decoded := dnsPacket.Decode(buffer)
-			fmt.Printf("SRV Query: %d %s\n", decoded.Questions[0].Qtype, sender.IP)
 			if decoded.Type == "response" && decoded.Ancount >= 0 {
 				answer := decoded.Answers[0]
 
@@ -137,18 +135,13 @@ func (s *Server) Advertise() {
 		buffer := make([]byte, 1024)
 		for {
 
-			_, sender, _ := s.multicastConn.ReadFromUDP(buffer)
+			s.multicastConn.ReadFromUDP(buffer)
 
 			decoded := dnsPacket.Decode(buffer)
 			//1. is packet a dns query?
 			if decoded.Type == "query" && decoded.Qdcount > 0 {
-				fmt.Printf("Query: %d %s\n", decoded.Questions[0].Qtype, sender.IP)
 				handleQuery(s, *decoded)
 			}
-
-			// if decoded.Type == "response" {
-			// 	onResponse <- *decoded
-			// }
 		}
 
 	}()
