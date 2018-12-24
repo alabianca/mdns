@@ -33,9 +33,10 @@ func (s *Server) LookupSRV(name string) dnsPacket.RecordTypeSRV {
 		buffer := make([]byte, 1024)
 
 		for {
-
+			//fmt.Println("Read SRV")
 			_, sender, _ := s.multicastConn.ReadFromUDP(buffer)
-
+			//fmt.Println("Succeesfully read srv ", sender.IP)
+			//fmt.Printf("[%s] Query in SRV Lookup from %s\n", time.Now(), sender.IP)
 			decoded := dnsPacket.Decode(buffer)
 			if decoded.Type == "response" && decoded.Ancount >= 0 {
 				answer := decoded.Answers[0]
@@ -51,14 +52,15 @@ func (s *Server) LookupSRV(name string) dnsPacket.RecordTypeSRV {
 	}(result)
 
 	//Query every 500 milliseconds until we found a match ...
+	timer := time.NewTicker(time.Duration(1) * time.Second)
 	for {
 		select {
 		case record := <-result:
 			return record
-		default:
+		case <-timer.C:
 			//fmt.Println("Query from service")
 			s.Query(name, "IN", "SRV")
-			time.Sleep(time.Second * 1)
+			// time.Sleep(time.Second * 5)
 		}
 	}
 }
@@ -70,8 +72,10 @@ func (s *Server) LookupA(name string) dnsPacket.RecordTypeA {
 		buffer := make([]byte, 1024)
 
 		for {
+			//fmt.Println("Read A")
 			_, sender, _ := s.multicastConn.ReadFromUDP(buffer)
-
+			//fmt.Println("Successfully Read A ", sender.IP)
+			//fmt.Printf("[%s] Query in A Lookup from %s\n", time.Now(), sender.IP)
 			decoded := dnsPacket.Decode(buffer)
 
 			if decoded.Type == "response" && decoded.Ancount >= 0 {
@@ -88,14 +92,15 @@ func (s *Server) LookupA(name string) dnsPacket.RecordTypeA {
 	}(result)
 
 	//Query every 500 milliseconds until we found a match ...
+	timer := time.NewTicker(time.Duration(1) * time.Second)
 	for {
 		select {
 		case record := <-result:
 			return record
-		default:
+		case <-timer.C:
 			//fmt.Println("Query from A")
 			s.Query(name, "IN", "A")
-			time.Sleep(time.Second * 1)
+			//time.Sleep(time.Second * 5)
 		}
 	}
 }
@@ -127,6 +132,8 @@ func (s *Server) Respond(name string, anType int, queryPacket dnsPacket.DNSPacke
 	queryPacket.Ancount = queryPacket.Ancount + 1
 
 	s.conn.Write(dnsPacket.Encode(&queryPacket))
+
+	//fmt.Println("Just responded to ", anType)
 }
 
 func (s *Server) Advertise() {
@@ -134,13 +141,14 @@ func (s *Server) Advertise() {
 	go func() {
 		buffer := make([]byte, 1024)
 		for {
-
-			s.multicastConn.ReadFromUDP(buffer)
-
+			//fmt.Println("Reading from UDP in advertise")
+			_, sender, _ := s.multicastConn.ReadFromUDP(buffer)
+			//fmt.Println("Successfully read from advertise")
+			//fmt.Printf("[%s] Query in Advertise from %s\n", time.Now(), sender.IP)
 			decoded := dnsPacket.Decode(buffer)
 			//1. is packet a dns query?
 			if decoded.Type == "query" && decoded.Qdcount > 0 {
-				handleQuery(s, *decoded)
+				handleQuery(s, *decoded, sender.IP)
 			}
 		}
 
@@ -163,12 +171,12 @@ func (s *Server) RegisterService(name string, host string, ip string, port uint1
 	s.entries[host] = service
 }
 
-func handleQuery(s *Server, packet dnsPacket.DNSPacket) bool {
+func handleQuery(s *Server, packet dnsPacket.DNSPacket, sender net.IP) bool {
 	//look at the first question only
 	question := packet.Questions[0]
 
 	service, ok := s.entries[question.Qname]
-
+	//fmt.Printf("Handling Query From: %s\n Service: %s\n ok: %s\n", sender, service.Name, ok)
 	//we don't have the service registered. just return...
 	if !ok {
 		return false
@@ -189,7 +197,7 @@ func handleQuery(s *Server, packet dnsPacket.DNSPacket) bool {
 			Priority: service.Priority,
 		}
 	}
-
+	//fmt.Println("Responding ", question.Qname)
 	s.Respond(question.Qname, question.Qtype, packet, record.Encode())
 
 	return true
