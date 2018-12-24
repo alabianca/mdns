@@ -24,6 +24,31 @@ type Server struct {
 	conn          *net.UDPConn
 	entries       map[string]serviceEntry
 	me            net.IP
+	responseChan  chan dnsPacket.DNSPacket
+	queryChan     chan dnsPacket.DNSPacket
+}
+
+func (s *Server) Browse() {
+	go func() {
+		buffer := make([]byte, 1024)
+
+		for {
+			_, sender, _ := s.multicastConn.ReadFromUDP(buffer)
+
+			if sender.IP.Equal(s.me) {
+				continue
+			}
+
+			decoded := dnsPacket.Decode(buffer)
+
+			switch decoded.Type {
+			case "response":
+				s.responseChan <- *decoded
+			case "query":
+				s.queryChan <- *decoded
+			}
+		}
+	}()
 }
 
 func (s *Server) LookupSRV(name string) dnsPacket.RecordTypeSRV {
@@ -138,40 +163,40 @@ func (s *Server) Respond(name string, anType int, queryPacket dnsPacket.DNSPacke
 	//fmt.Println("Just responded to ", anType)
 }
 
-func (s *Server) Advertise() {
+// func (s *Server) Advertise() {
 
-	go func() {
-		buffer := make([]byte, 1024)
-		for {
-			//fmt.Println("Reading from UDP in advertise")
-			_, sender, _ := s.multicastConn.ReadFromUDP(buffer)
-			//fmt.Println("Successfully read from advertise")
-			//fmt.Printf("[%s] Query in Advertise from %s\n", time.Now(), sender.IP)
-			decoded := dnsPacket.Decode(buffer)
-			//1. is packet a dns query?
-			if decoded.Type == "query" && decoded.Qdcount > 0 {
-				handleQuery(s, *decoded, sender.IP)
-			}
-		}
+// 	go func() {
+// 		buffer := make([]byte, 1024)
+// 		for {
+// 			//fmt.Println("Reading from UDP in advertise")
+// 			_, sender, _ := s.multicastConn.ReadFromUDP(buffer)
+// 			//fmt.Println("Successfully read from advertise")
+// 			//fmt.Printf("[%s] Query in Advertise from %s\n", time.Now(), sender.IP)
+// 			decoded := dnsPacket.Decode(buffer)
+// 			//1. is packet a dns query?
+// 			if decoded.Type == "query" && decoded.Qdcount > 0 {
+// 				handleQuery(s, *decoded, sender.IP)
+// 			}
+// 		}
 
-	}()
-}
+// 	}()
+// }
 
-func (s *Server) RegisterService(name string, host string, ip string, port uint16, ttl uint32, priority uint16, weight uint16) {
+// func (s *Server) RegisterService(name string, host string, ip string, port uint16, ttl uint32, priority uint16, weight uint16) {
 
-	service := serviceEntry{
-		Name:     name,
-		Host:     host,
-		IP:       ip,
-		Port:     port,
-		TTL:      ttl,
-		Priority: priority,
-		Weight:   weight,
-	}
+// 	service := serviceEntry{
+// 		Name:     name,
+// 		Host:     host,
+// 		IP:       ip,
+// 		Port:     port,
+// 		TTL:      ttl,
+// 		Priority: priority,
+// 		Weight:   weight,
+// 	}
 
-	s.entries[name] = service
-	s.entries[host] = service
-}
+// 	s.entries[name] = service
+// 	s.entries[host] = service
+// }
 
 func handleQuery(s *Server, packet dnsPacket.DNSPacket, sender net.IP) bool {
 	//look at the first question only
