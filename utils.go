@@ -6,6 +6,7 @@ import (
 	"strings"
 )
 
+//NoIPv4FoundError : No IPv4 found
 type NoIPv4FoundError struct{}
 
 func (e NoIPv4FoundError) Error() string {

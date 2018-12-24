@@ -39,7 +39,6 @@ func New() (*Server, error) {
 	serv.conn = conn
 	serv.multicastConn = pc
 	serv.me = me
-	serv.entries = make(map[string]serviceEntry)
 	serv.QueryChan = make(chan dnsPacket.DNSPacket)
 	serv.ResponseChan = make(chan dnsPacket.DNSPacket)
 

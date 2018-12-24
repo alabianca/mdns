@@ -2,32 +2,21 @@ package mdns
 
 import (
 	"net"
-	"time"
 
 	"github.com/alabianca/dnsPacket"
 )
-
-type serviceEntry struct {
-	IP       string
-	Port     uint16
-	Host     string
-	Weight   uint16
-	TTL      uint32
-	Priority uint16
-	Name     string
-}
 
 //Server is a mdns server
 type Server struct {
 	address       string
 	multicastConn *net.UDPConn
 	conn          *net.UDPConn
-	entries       map[string]serviceEntry
 	me            net.IP
 	ResponseChan  chan dnsPacket.DNSPacket
 	QueryChan     chan dnsPacket.DNSPacket
 }
 
+//Browse for other devices in the local network
 func (s *Server) Browse() {
 	go func() {
 		buffer := make([]byte, 1024)
@@ -49,87 +38,6 @@ func (s *Server) Browse() {
 	}()
 }
 
-func (s *Server) LookupSRV(name string) dnsPacket.RecordTypeSRV {
-	result := make(chan dnsPacket.RecordTypeSRV)
-
-	go func(found chan dnsPacket.RecordTypeSRV) {
-		buffer := make([]byte, 1024)
-
-		for {
-			//fmt.Println("Read SRV")
-			_, sender, _ := s.multicastConn.ReadFromUDP(buffer)
-			//fmt.Println("Succeesfully read srv ", sender.IP)
-			//fmt.Printf("[%s] Query in SRV Lookup from %s\n", time.Now(), sender.IP)
-			decoded := dnsPacket.Decode(buffer)
-			if decoded.Type == "response" && decoded.Ancount >= 0 {
-				answer := decoded.Answers[0]
-
-				//is an srv record and the sender is not myself and the answer name is actually what we are looking for
-				if answer.Type == 33 && !sender.IP.Equal(s.me) && answer.Name == name {
-					record := answer.Process()
-
-					found <- *record.(*dnsPacket.RecordTypeSRV)
-					return
-				}
-			}
-		}
-	}(result)
-
-	//Query every 500 milliseconds until we found a match ...
-	timer := time.NewTicker(time.Duration(1) * time.Second)
-	for {
-		select {
-		case record := <-result:
-			return record
-		case <-timer.C:
-			//fmt.Println("Query from service")
-			s.Query(name, "IN", "SRV")
-			// time.Sleep(time.Second * 5)
-		}
-	}
-}
-
-func (s *Server) LookupA(name string) dnsPacket.RecordTypeA {
-	result := make(chan dnsPacket.RecordTypeA)
-
-	go func(found chan dnsPacket.RecordTypeA) {
-		buffer := make([]byte, 1024)
-
-		for {
-			//fmt.Println("Read A")
-			_, sender, _ := s.multicastConn.ReadFromUDP(buffer)
-			//fmt.Println("Successfully Read A ", sender.IP)
-			//fmt.Printf("[%s] Query in A Lookup from %s\n", time.Now(), sender.IP)
-			decoded := dnsPacket.Decode(buffer)
-
-			if decoded.Type == "response" && decoded.Ancount >= 0 {
-				answer := decoded.Answers[0]
-
-				//is an srv record and the sender is not myself and the answer name is actually what we are looking for
-				if answer.Type == 1 && !sender.IP.Equal(s.me) && answer.Name == name {
-					record := answer.Process()
-
-					found <- *record.(*dnsPacket.RecordTypeA)
-					return
-				}
-			}
-		}
-	}(result)
-
-	//Query every 500 milliseconds until we found a match ...
-	timer := time.NewTicker(time.Duration(1) * time.Second)
-	for {
-		select {
-		case record := <-result:
-			return record
-		case <-timer.C:
-			//fmt.Println("Query from A")
-			s.Query(name, "IN", "A")
-			//time.Sleep(time.Second * 5)
-		}
-	}
-}
-
 //Query queries for a record on the local network
 func (s *Server) Query(name string, class string, qType string) {
 	queryType := mapType(qType)
@@ -149,6 +57,7 @@ func (s *Server) Query(name string, class string, qType string) {
 
 }
 
+//Respond to a Query
 func (s *Server) Respond(name string, anType int, queryPacket dnsPacket.DNSPacket, responseData []byte) {
 
 	queryPacket.AddAnswer(name, 1, anType, 500, len(responseData), responseData)
@@ -159,74 +68,6 @@ func (s *Server) Respond(name string, anType int, queryPacket dnsPacket.DNSPacke
 	s.conn.Write(dnsPacket.Encode(&queryPacket))
 
 	//fmt.Println("Just responded to ", anType)
-}
-
-// func (s *Server) Advertise() {
-
-// 	go func() {
-// 		buffer := make([]byte, 1024)
-// 		for {
-// 			//fmt.Println("Reading from UDP in advertise")
-// 			_, sender, _ := s.multicastConn.ReadFromUDP(buffer)
-// 			//fmt.Println("Successfully read from advertise")
-// 			//fmt.Printf("[%s] Query in Advertise from %s\n", time.Now(), sender.IP)
-// 			decoded := dnsPacket.Decode(buffer)
-// 			//1. is packet a dns query?
-// 			if decoded.Type == "query" && decoded.Qdcount > 0 {
-// 				handleQuery(s, *decoded, sender.IP)
-// 			}
-// 		}
-
-// 	}()
-// }
-
-// func (s *Server) RegisterService(name string, host string, ip string, port uint16, ttl uint32, priority uint16, weight uint16) {
-
-// 	service := serviceEntry{
-// 		Name:     name,
-// 		Host:     host,
-// 		IP:       ip,
-// 		Port:     port,
-// 		TTL:      ttl,
-// 		Priority: priority,
-// 		Weight:   weight,
-// 	}
-
-// 	s.entries[name] = service
-// 	s.entries[host] = service
-// }
-
-func handleQuery(s *Server, packet dnsPacket.DNSPacket, sender net.IP) bool {
-	//look at the first question only
-	question := packet.Questions[0]
-
-	service, ok := s.entries[question.Qname]
-	//fmt.Printf("Handling Query From: %s\n Service: %s\n ok: %s\n", sender, service.Name, ok)
-	//we don't have the service registered. just return...
-	if !ok {
-		return false
-	}
-
-	var record dnsPacket.PacketProcessor
-	switch question.Qtype {
-	case 1:
-		record = &dnsPacket.RecordTypeA{
-			IPv4: service.IP,
-		}
-
-	case 33:
-		record = &dnsPacket.RecordTypeSRV{
-			Target:   service.Host,
-			Weight:   service.Weight,
-			Port:     service.Port,
-			Priority: service.Priority,
-		}
-	}
-	//fmt.Println("Responding ", question.Qname)
-	s.Respond(question.Qname, question.Qtype, packet, record.Encode())
-
-	return true
-
 }
 
 //todo: map other classes
