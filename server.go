@@ -33,6 +33,7 @@ func (s *Server) LookupSRV(name string) dnsPacket.RecordTypeSRV {
 		buffer := make([]byte, 1024)
 
 		for {
+
 			_, sender, _ := s.multicastConn.ReadFromUDP(buffer)
 
 			decoded := dnsPacket.Decode(buffer)
@@ -56,8 +57,9 @@ func (s *Server) LookupSRV(name string) dnsPacket.RecordTypeSRV {
 		case record := <-result:
 			return record
 		default:
+			//fmt.Println("Query from service")
 			s.Query(name, "IN", "SRV")
-			time.Sleep(time.Millisecond * 500)
+			time.Sleep(time.Second * 1)
 		}
 	}
 }
@@ -92,8 +94,9 @@ func (s *Server) LookupA(name string) dnsPacket.RecordTypeA {
 		case record := <-result:
 			return record
 		default:
+			//fmt.Println("Query from A")
 			s.Query(name, "IN", "A")
-			time.Sleep(time.Millisecond * 500)
+			time.Sleep(time.Second * 1)
 		}
 	}
 }
@@ -133,10 +136,10 @@ func (s *Server) Advertise() chan dnsPacket.DNSPacket {
 	go func(onResponse chan dnsPacket.DNSPacket) {
 		buffer := make([]byte, 1024)
 		for {
+
 			s.multicastConn.ReadFromUDP(buffer)
 
 			decoded := dnsPacket.Decode(buffer)
-
 			//1. is packet a dns query?
 			if decoded.Type == "query" && decoded.Qdcount > 0 {
 				handleQuery(s, *decoded)
